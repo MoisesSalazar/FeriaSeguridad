@@ -1,5 +1,12 @@
 import { Head } from '@inertiajs/react';
-import { Users, Trophy, Clock, BarChart3, PieChart } from 'lucide-react';
+import {
+    Users,
+    Trophy,
+    Clock,
+    BarChart3,
+    PieChart,
+    Database,
+} from 'lucide-react';
 
 interface HourlyData {
     hour: string;
@@ -12,6 +19,7 @@ interface BlockData {
 }
 
 export interface DashboardData {
+    has_data?: boolean;
     date_title: string;
     year: string;
     kpis: {
@@ -51,63 +59,63 @@ interface WelcomeProps {
     dashboard?: DashboardData;
 }
 
-const DEFAULT_HOURLY: HourlyData[] = [
-    { hour: '10:00', count: 153 },
-    { hour: '11:00', count: 95 },
-    { hour: '12:00', count: 96 },
-    { hour: '13:00', count: 45 },
-    { hour: '14:00', count: 74 },
-    { hour: '15:00', count: 33 },
-    { hour: '16:00', count: 92 },
-    { hour: '17:00', count: 135 },
-    { hour: '18:00', count: 143 },
-    { hour: '19:00', count: 66 },
-];
-
-const DEFAULT_BLOCKS: BlockData[] = [
-    { label: '10-12h', count: 248 },
-    { label: '12-14h', count: 119 },
-    { label: '14-16h', count: 227 },
-    { label: '16-18h', count: 272 },
-];
-
 export default function Welcome({ dashboard }: WelcomeProps) {
-    // Dynamic values from SQLite with fallbacks
+    const hasData = Boolean(
+        dashboard?.has_data ??
+        (dashboard &&
+            dashboard.kpis &&
+            dashboard.kpis.registered_entries > 0 &&
+            dashboard.hourly_attendance &&
+            dashboard.hourly_attendance.length > 0),
+    );
+
     const dateTitle = dashboard?.date_title || '26 de octubre';
     const year = dashboard?.year || '2026';
 
-    const registeredEntries = dashboard?.kpis?.registered_entries ?? 932;
-    const peakHour = dashboard?.kpis?.peak_hour?.hour ?? '10:00';
-    const peakEntries = dashboard?.kpis?.peak_hour?.entries ?? 153;
-    const analyzedHoursCount = dashboard?.kpis?.analyzed_hours?.count ?? 10;
-    const analyzedHoursRange =
-        dashboard?.kpis?.analyzed_hours?.range ?? '(10:00 – 19:59)';
+    const registeredEntries = hasData
+        ? (dashboard?.kpis?.registered_entries ?? 0)
+        : 0;
+    const peakHour = hasData ? (dashboard?.kpis?.peak_hour?.hour ?? '-') : '-';
+    const peakEntries = hasData
+        ? (dashboard?.kpis?.peak_hour?.entries ?? 0)
+        : 0;
+    const analyzedHoursCount = hasData
+        ? (dashboard?.kpis?.analyzed_hours?.count ?? 0)
+        : 0;
+    const analyzedHoursRange = hasData
+        ? (dashboard?.kpis?.analyzed_hours?.range ?? '-')
+        : '-';
 
-    const hourlyData = dashboard?.hourly_attendance?.length
-        ? dashboard.hourly_attendance
-        : DEFAULT_HOURLY;
-    const blockData = dashboard?.two_hour_blocks?.length
-        ? dashboard.two_hour_blocks
-        : DEFAULT_BLOCKS;
+    const hourlyData: HourlyData[] = hasData
+        ? (dashboard?.hourly_attendance ?? [])
+        : [];
+    const blockData: BlockData[] = hasData
+        ? (dashboard?.two_hour_blocks ?? [])
+        : [];
 
-    const morningPercent =
-        dashboard?.attendance_distribution?.morning?.percentage ?? 53.2;
-    const afternoonPercent =
-        dashboard?.attendance_distribution?.afternoon?.percentage ?? 46.8;
-    const morningBadgeText =
-        dashboard?.attendance_distribution?.main_badge?.percentage ?? '53.2%';
-    const morningBadgeLabel =
-        dashboard?.attendance_distribution?.main_badge?.label ?? 'en la mañana';
+    const morningPercent = hasData
+        ? (dashboard?.attendance_distribution?.morning?.percentage ?? 0)
+        : 0;
+    const afternoonPercent = hasData
+        ? (dashboard?.attendance_distribution?.afternoon?.percentage ?? 0)
+        : 0;
+    const morningBadgeText = hasData
+        ? (dashboard?.attendance_distribution?.main_badge?.percentage ?? '0%')
+        : '0%';
+    const morningBadgeLabel = hasData
+        ? (dashboard?.attendance_distribution?.main_badge?.label ??
+            'sin registros')
+        : 'sin registros';
 
     const yAxisTicks = [180, 150, 120, 90, 60, 30, 0];
     const maxHourlyValue = 180;
     const maxBlockValue = 280;
 
-    // SVG donut calculations for exact circular proportions
+    // SVG donut calculations
     const radius = 38;
     const circumference = 2 * Math.PI * radius; // 238.761
     const orangeStrokeLength = (morningPercent / 100) * circumference;
-    const blueStrokeLength = circumference - orangeStrokeLength;
+    const blueStrokeLength = Math.max(0, circumference - orangeStrokeLength);
 
     return (
         <>
@@ -130,7 +138,7 @@ export default function Welcome({ dashboard }: WelcomeProps) {
                     <header className="flex items-center justify-between gap-3 pt-1 pb-1">
                         <div className="flex flex-1 items-center">
                             <img
-                                src="/images/logo_s26_transparent.png"
+                                src="/logo.png"
                                 alt="Semana de la Seguridad Toquepala 2026"
                                 className="h-28 w-auto object-contain drop-shadow-[0_0_15px_rgba(0,210,255,0.3)] filter transition-transform duration-300 hover:scale-105 sm:h-36"
                             />
@@ -183,7 +191,9 @@ export default function Welcome({ dashboard }: WelcomeProps) {
                                     {peakHour}
                                 </div>
                                 <div className="mt-0.5 text-[10px] font-bold text-amber-400/90 sm:text-xs">
-                                    {peakEntries} entradas
+                                    {hasData
+                                        ? `${peakEntries} entradas`
+                                        : '0 entradas'}
                                 </div>
                             </div>
                         </div>
@@ -226,78 +236,94 @@ export default function Welcome({ dashboard }: WelcomeProps) {
                         </div>
 
                         {/* Chart Area */}
-                        <div className="relative pt-2 pb-1">
-                            {/* Y-axis and Gridlines */}
-                            <div className="flex flex-row">
-                                {/* Y-axis labels */}
-                                <div className="flex h-44 flex-col items-end justify-between pr-2.5 text-[10px] font-medium text-slate-400 select-none sm:text-xs">
-                                    {yAxisTicks.map((tick) => (
-                                        <span
-                                            key={tick}
-                                            className="leading-none"
-                                        >
-                                            {tick}
-                                        </span>
-                                    ))}
-                                </div>
-
-                                {/* Bars Canvas */}
-                                <div className="relative flex h-44 flex-1 items-end justify-between border-l border-slate-700/60 px-1 sm:px-2">
-                                    {/* Horizontal grid lines */}
-                                    <div className="pointer-events-none absolute inset-0 flex flex-col justify-between">
+                        {hasData && hourlyData.length > 0 ? (
+                            <div className="relative pt-2 pb-1">
+                                {/* Y-axis and Gridlines */}
+                                <div className="flex flex-row">
+                                    {/* Y-axis labels */}
+                                    <div className="flex h-44 flex-col items-end justify-between pr-2.5 text-[10px] font-medium text-slate-400 select-none sm:text-xs">
                                         {yAxisTicks.map((tick) => (
-                                            <div
-                                                key={`grid-${tick}`}
-                                                className="w-full border-b border-dashed border-cyan-900/30"
-                                            />
+                                            <span
+                                                key={tick}
+                                                className="leading-none"
+                                            >
+                                                {tick}
+                                            </span>
                                         ))}
                                     </div>
 
-                                    {/* Bars */}
-                                    {hourlyData.map((item) => {
-                                        const heightPercent = Math.min(
-                                            100,
-                                            Math.max(
-                                                4,
-                                                (item.count / maxHourlyValue) *
-                                                    100,
-                                            ),
-                                        );
-                                        return (
-                                            <div
-                                                key={item.hour}
-                                                className="group relative z-10 flex h-full w-[8%] cursor-pointer flex-col items-center justify-end"
-                                            >
-                                                {/* Value text above bar */}
-                                                <span className="mb-1 text-[10px] font-bold text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)] sm:text-xs">
-                                                    {item.count}
-                                                </span>
-
-                                                {/* Bar element */}
+                                    {/* Bars Canvas */}
+                                    <div className="relative flex h-44 flex-1 items-end justify-between border-l border-slate-700/60 px-1 sm:px-2">
+                                        {/* Horizontal grid lines */}
+                                        <div className="pointer-events-none absolute inset-0 flex flex-col justify-between">
+                                            {yAxisTicks.map((tick) => (
                                                 <div
-                                                    style={{
-                                                        height: `${heightPercent}%`,
-                                                    }}
-                                                    className="w-full rounded-t-sm bg-gradient-to-t from-[#0284c7] via-[#0284c7] to-[#00d2ff] shadow-[0_0_10px_rgba(0,210,255,0.4)] transition-all duration-300 group-hover:brightness-125 sm:rounded-t-md"
+                                                    key={`grid-${tick}`}
+                                                    className="w-full border-b border-dashed border-cyan-900/30"
                                                 />
-                                            </div>
-                                        );
-                                    })}
+                                            ))}
+                                        </div>
+
+                                        {/* Bars */}
+                                        {hourlyData.map((item) => {
+                                            const heightPercent = Math.min(
+                                                100,
+                                                Math.max(
+                                                    4,
+                                                    (item.count /
+                                                        maxHourlyValue) *
+                                                    100,
+                                                ),
+                                            );
+                                            return (
+                                                <div
+                                                    key={item.hour}
+                                                    className="group relative z-10 flex h-full w-[8%] cursor-pointer flex-col items-center justify-end"
+                                                >
+                                                    {/* Value text above bar */}
+                                                    <span className="mb-1 text-[10px] font-bold text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)] sm:text-xs">
+                                                        {item.count}
+                                                    </span>
+
+                                                    {/* Bar element */}
+                                                    <div
+                                                        style={{
+                                                            height: `${heightPercent}%`,
+                                                        }}
+                                                        className="w-full rounded-t-sm bg-gradient-to-t from-[#0284c7] via-[#0284c7] to-[#00d2ff] shadow-[0_0_10px_rgba(0,210,255,0.4)] transition-all duration-300 group-hover:brightness-125 sm:rounded-t-md"
+                                                    />
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+
+                                {/* X-axis labels */}
+                                <div className="mt-2 flex justify-between border-t border-slate-700/60 pt-1 pr-1 pl-7 sm:pr-2 sm:pl-9">
+                                    {hourlyData.map((item) => (
+                                        <div
+                                            key={`x-${item.hour}`}
+                                            className="w-[8%] text-center text-[9px] font-medium text-slate-300 sm:text-[11px]"
+                                        >
+                                            {item.hour}
+                                        </div>
+                                    ))}
                                 </div>
                             </div>
-
-                            {/* X-axis labels */}
-                            <div className="mt-2 flex justify-between border-t border-slate-700/60 pt-1 pr-1 pl-7 sm:pr-2 sm:pl-9">
-                                {hourlyData.map((item) => (
-                                    <div
-                                        key={`x-${item.hour}`}
-                                        className="w-[8%] text-center text-[9px] font-medium text-slate-300 sm:text-[11px]"
-                                    >
-                                        {item.hour}
-                                    </div>
-                                ))}
+                        ) : (
+                            /* Empty state when there is no data */
+                            <div className="flex h-44 flex-col items-center justify-center rounded-xl border border-dashed border-cyan-900/40 bg-cyan-950/10 py-8 text-center">
+                                <Database className="mb-2 h-10 w-10 stroke-1 text-cyan-500/40" />
+                                <p className="text-sm font-semibold text-slate-200">
+                                    No hay registros de afluencia
+                                </p>
+                                <p className="mt-1 max-w-xs text-xs text-slate-400">
+                                    La base de datos aún no contiene registros.
+                                    Ejecuta la importación para cargar los
+                                    datos.
+                                </p>
                             </div>
-                        </div>
+                        )}
                     </section>
 
                     {/* Bottom 2 Cards Grid */}
@@ -313,93 +339,102 @@ export default function Welcome({ dashboard }: WelcomeProps) {
                             </div>
 
                             {/* Donut Chart + Legend */}
-                            <div className="my-auto flex items-center justify-around gap-2 py-2">
-                                {/* SVG Donut Chart */}
-                                <div className="relative flex h-28 w-28 items-center justify-center sm:h-32 sm:w-32">
-                                    <svg
-                                        className="h-full w-full -rotate-90"
-                                        viewBox="0 0 100 100"
-                                    >
-                                        <circle
-                                            cx="50"
-                                            cy="50"
-                                            r="38"
-                                            className="stroke-transparent"
-                                            strokeWidth="16"
-                                            fill="transparent"
-                                        />
-                                        {/* Orange Segment: morning */}
-                                        <circle
-                                            cx="50"
-                                            cy="50"
-                                            r="38"
-                                            stroke="#f97316"
-                                            strokeWidth="16"
-                                            fill="transparent"
-                                            strokeDasharray={`${orangeStrokeLength} ${circumference}`}
-                                            strokeDashoffset="0"
-                                            className="transition-all duration-500"
-                                        />
-                                        {/* Blue Segment: afternoon */}
-                                        <circle
-                                            cx="50"
-                                            cy="50"
-                                            r="38"
-                                            stroke="#0284c7"
-                                            strokeWidth="16"
-                                            fill="transparent"
-                                            strokeDasharray={`${blueStrokeLength} ${circumference}`}
-                                            strokeDashoffset={`-${orangeStrokeLength}`}
-                                            className="transition-all duration-500"
-                                        />
-                                    </svg>
+                            {hasData ? (
+                                <div className="my-auto flex items-center justify-around gap-2 py-2">
+                                    {/* SVG Donut Chart */}
+                                    <div className="relative flex h-28 w-28 items-center justify-center sm:h-32 sm:w-32">
+                                        <svg
+                                            className="h-full w-full -rotate-90"
+                                            viewBox="0 0 100 100"
+                                        >
+                                            <circle
+                                                cx="50"
+                                                cy="50"
+                                                r="38"
+                                                className="stroke-transparent"
+                                                strokeWidth="16"
+                                                fill="transparent"
+                                            />
+                                            {/* Orange Segment: morning */}
+                                            <circle
+                                                cx="50"
+                                                cy="50"
+                                                r="38"
+                                                stroke="#f97316"
+                                                strokeWidth="16"
+                                                fill="transparent"
+                                                strokeDasharray={`${orangeStrokeLength} ${circumference}`}
+                                                strokeDashoffset="0"
+                                                className="transition-all duration-500"
+                                            />
+                                            {/* Blue Segment: afternoon */}
+                                            <circle
+                                                cx="50"
+                                                cy="50"
+                                                r="38"
+                                                stroke="#0284c7"
+                                                strokeWidth="16"
+                                                fill="transparent"
+                                                strokeDasharray={`${blueStrokeLength} ${circumference}`}
+                                                strokeDashoffset={`-${orangeStrokeLength}`}
+                                                className="transition-all duration-500"
+                                            />
+                                        </svg>
 
-                                    {/* Center badge */}
-                                    <div className="absolute inset-0 m-auto flex h-16 w-16 flex-col items-center justify-center rounded-full bg-gradient-to-br from-[#ea580c] to-[#c2410c] p-1 text-center shadow-[inset_0_2px_6px_rgba(255,255,255,0.3),0_0_12px_rgba(234,88,12,0.5)] sm:h-18 sm:w-18">
-                                        <span className="text-xs leading-tight font-black text-white drop-shadow-sm sm:text-sm">
-                                            {morningBadgeText}
-                                        </span>
-                                        <span className="text-[8px] leading-tight font-medium text-white/90 sm:text-[9px]">
-                                            {morningBadgeLabel}
-                                        </span>
-                                    </div>
-                                </div>
-
-                                {/* Legend */}
-                                <div className="flex flex-col gap-3">
-                                    {/* Mañana item */}
-                                    <div className="flex items-start gap-2">
-                                        <span className="mt-0.5 h-3 w-3 rounded-full bg-[#0284c7] shadow-[0_0_6px_#0284c7]" />
-                                        <div className="flex flex-col text-[11px] sm:text-xs">
-                                            <span className="font-semibold text-slate-100">
-                                                Mañana
+                                        {/* Center badge */}
+                                        <div className="absolute inset-0 m-auto flex h-16 w-16 flex-col items-center justify-center rounded-full bg-gradient-to-br from-[#ea580c] to-[#c2410c] p-1 text-center shadow-[inset_0_2px_6px_rgba(255,255,255,0.3),0_0_12px_rgba(234,88,12,0.5)] sm:h-18 sm:w-18">
+                                            <span className="text-xs leading-tight font-black text-white drop-shadow-sm sm:text-sm">
+                                                {morningBadgeText}
                                             </span>
-                                            <span className="text-[10px] text-slate-400 sm:text-[11px]">
-                                                (10:00 – 13:59)
-                                            </span>
-                                            <span className="text-xs font-bold text-white sm:text-sm">
-                                                {morningPercent}%
+                                            <span className="text-[8px] leading-tight font-medium text-white/90 sm:text-[9px]">
+                                                {morningBadgeLabel}
                                             </span>
                                         </div>
                                     </div>
 
-                                    {/* Tarde item */}
-                                    <div className="flex items-start gap-2">
-                                        <span className="mt-0.5 h-3 w-3 rounded-full bg-[#f97316] shadow-[0_0_6px_#f97316]" />
-                                        <div className="flex flex-col text-[11px] sm:text-xs">
-                                            <span className="font-semibold text-slate-100">
-                                                Tarde
-                                            </span>
-                                            <span className="text-[10px] text-slate-400 sm:text-[11px]">
-                                                (14:00 – 19:59)
-                                            </span>
-                                            <span className="text-xs font-bold text-white sm:text-sm">
-                                                {afternoonPercent}%
-                                            </span>
+                                    {/* Legend */}
+                                    <div className="flex flex-col gap-3">
+                                        {/* Mañana item */}
+                                        <div className="flex items-start gap-2">
+                                            <span className="mt-0.5 h-3 w-3 rounded-full bg-[#0284c7] shadow-[0_0_6px_#0284c7]" />
+                                            <div className="flex flex-col text-[11px] sm:text-xs">
+                                                <span className="font-semibold text-slate-100">
+                                                    Mañana
+                                                </span>
+                                                <span className="text-[10px] text-slate-400 sm:text-[11px]">
+                                                    (10:00 – 13:59)
+                                                </span>
+                                                <span className="text-xs font-bold text-white sm:text-sm">
+                                                    {morningPercent}%
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        {/* Tarde item */}
+                                        <div className="flex items-start gap-2">
+                                            <span className="mt-0.5 h-3 w-3 rounded-full bg-[#f97316] shadow-[0_0_6px_#f97316]" />
+                                            <div className="flex flex-col text-[11px] sm:text-xs">
+                                                <span className="font-semibold text-slate-100">
+                                                    Tarde
+                                                </span>
+                                                <span className="text-[10px] text-slate-400 sm:text-[11px]">
+                                                    (14:00 – 19:59)
+                                                </span>
+                                                <span className="text-xs font-bold text-white sm:text-sm">
+                                                    {afternoonPercent}%
+                                                </span>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
-                            </div>
+                            ) : (
+                                <div className="flex h-32 flex-col items-center justify-center rounded-xl border border-dashed border-cyan-900/40 bg-cyan-950/10 p-3 text-center">
+                                    <PieChart className="mb-1 h-8 w-8 stroke-1 text-cyan-500/40" />
+                                    <p className="text-xs font-semibold text-slate-300">
+                                        Sin datos de distribución
+                                    </p>
+                                </div>
+                            )}
                         </div>
 
                         {/* Right Card: Afluencia por Bloques de 2 Horas */}
@@ -412,46 +447,59 @@ export default function Welcome({ dashboard }: WelcomeProps) {
                                 </h3>
                             </div>
 
-                            {/* 4 Bars Chart */}
-                            <div className="flex h-32 items-end justify-around px-1 pt-2">
-                                {blockData.map((block) => {
-                                    const heightPercent = Math.min(
-                                        100,
-                                        Math.max(
-                                            5,
-                                            (block.count / maxBlockValue) * 100,
-                                        ),
-                                    );
-                                    return (
-                                        <div
-                                            key={block.label}
-                                            className="group flex h-full w-1/5 cursor-pointer flex-col items-center justify-end"
-                                        >
-                                            <span className="mb-1.5 text-xs font-bold text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)] sm:text-sm">
-                                                {block.count}
-                                            </span>
-                                            <div
-                                                style={{
-                                                    height: `${heightPercent}%`,
-                                                }}
-                                                className="w-full rounded-t-md bg-gradient-to-t from-[#0284c7] via-[#0284c7] to-[#00d2ff] shadow-[0_0_10px_rgba(0,210,255,0.4)] transition-all duration-300 group-hover:brightness-125"
-                                            />
-                                        </div>
-                                    );
-                                })}
-                            </div>
-
-                            {/* X-axis labels */}
-                            <div className="mt-1 flex justify-around border-t border-slate-700/60 pt-2">
-                                {blockData.map((block) => (
-                                    <div
-                                        key={`label-${block.label}`}
-                                        className="w-1/5 text-center text-[10px] font-medium text-slate-300 sm:text-xs"
-                                    >
-                                        {block.label}
+                            {hasData && blockData.length > 0 ? (
+                                <>
+                                    {/* 4 Bars Chart */}
+                                    <div className="flex h-32 items-end justify-around px-1 pt-2">
+                                        {blockData.map((block) => {
+                                            const heightPercent = Math.min(
+                                                100,
+                                                Math.max(
+                                                    5,
+                                                    (block.count /
+                                                        maxBlockValue) *
+                                                    100,
+                                                ),
+                                            );
+                                            return (
+                                                <div
+                                                    key={block.label}
+                                                    className="group flex h-full w-1/5 cursor-pointer flex-col items-center justify-end"
+                                                >
+                                                    <span className="mb-1.5 text-xs font-bold text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)] sm:text-sm">
+                                                        {block.count}
+                                                    </span>
+                                                    <div
+                                                        style={{
+                                                            height: `${heightPercent}%`,
+                                                        }}
+                                                        className="w-full rounded-t-md bg-gradient-to-t from-[#0284c7] via-[#0284c7] to-[#00d2ff] shadow-[0_0_10px_rgba(0,210,255,0.4)] transition-all duration-300 group-hover:brightness-125"
+                                                    />
+                                                </div>
+                                            );
+                                        })}
                                     </div>
-                                ))}
-                            </div>
+
+                                    {/* X-axis labels */}
+                                    <div className="mt-1 flex justify-around border-t border-slate-700/60 pt-2">
+                                        {blockData.map((block) => (
+                                            <div
+                                                key={`label-${block.label}`}
+                                                className="w-1/5 text-center text-[10px] font-medium text-slate-300 sm:text-xs"
+                                            >
+                                                {block.label}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </>
+                            ) : (
+                                <div className="flex h-32 flex-col items-center justify-center rounded-xl border border-dashed border-cyan-900/40 bg-cyan-950/10 p-3 text-center">
+                                    <Clock className="mb-1 h-8 w-8 stroke-1 text-cyan-500/40" />
+                                    <p className="text-xs font-semibold text-slate-300">
+                                        Sin bloques registrados
+                                    </p>
+                                </div>
+                            )}
                         </div>
                     </section>
 
