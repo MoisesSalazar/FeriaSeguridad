@@ -1,4 +1,4 @@
-import { Head } from '@inertiajs/react';
+import { Head, Link } from '@inertiajs/react';
 import {
     Users,
     Trophy,
@@ -6,6 +6,7 @@ import {
     BarChart3,
     PieChart,
     Database,
+    Terminal,
 } from 'lucide-react';
 
 interface HourlyData {
@@ -104,7 +105,7 @@ export default function Welcome({ dashboard }: WelcomeProps) {
         : '0%';
     const morningBadgeLabel = hasData
         ? (dashboard?.attendance_distribution?.main_badge?.label ??
-            'sin registros')
+          'sin registros')
         : 'sin registros';
 
     const yAxisTicks = [180, 150, 120, 90, 60, 30, 0];
@@ -134,6 +135,20 @@ export default function Welcome({ dashboard }: WelcomeProps) {
 
                 {/* Main responsive container */}
                 <main className="relative z-10 mx-auto flex w-full max-w-[620px] flex-col gap-4 px-3 py-4 sm:gap-5 sm:px-5 sm:py-6">
+                    {/* Top utility link to API documentation & data entry */}
+                    <div className="flex items-center justify-between px-1">
+                        <span className="text-[10px] font-bold tracking-wider text-cyan-500/70 uppercase sm:text-xs">
+                            Semana de la Seguridad 2026
+                        </span>
+                        <Link
+                            href="/api-docs"
+                            className="inline-flex items-center gap-1.5 rounded-full border border-cyan-500/50 bg-[#08152e]/80 px-3 py-1 text-xs font-bold text-cyan-300 shadow-[0_0_12px_rgba(6,182,212,0.3)] transition-all hover:border-cyan-400 hover:bg-cyan-500/20 hover:text-white"
+                        >
+                            <Terminal className="h-3.5 w-3.5 text-cyan-400" />
+                            API & Ingreso de Datos →
+                        </Link>
+                    </div>
+
                     {/* Header: S26 Logo + Date Title */}
                     <header className="flex items-center justify-between gap-3 pt-1 pb-1">
                         <div className="flex flex-1 items-center">
@@ -272,7 +287,7 @@ export default function Welcome({ dashboard }: WelcomeProps) {
                                                     4,
                                                     (item.count /
                                                         maxHourlyValue) *
-                                                    100,
+                                                        100,
                                                 ),
                                             );
                                             return (
@@ -458,7 +473,7 @@ export default function Welcome({ dashboard }: WelcomeProps) {
                                                     5,
                                                     (block.count /
                                                         maxBlockValue) *
-                                                    100,
+                                                        100,
                                                 ),
                                             );
                                             return (
