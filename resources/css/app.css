@@ -141,3 +141,140 @@
         @apply bg-background text-foreground;
     }
 }
+
+@keyframes cyberGlow {
+    0%, 100% {
+        opacity: 0.3;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 0.7;
+        transform: scale(1.06);
+    }
+}
+
+@keyframes waveFlow {
+    0% {
+        stroke-dashoffset: 0;
+    }
+    100% {
+        stroke-dashoffset: -120;
+    }
+}
+
+@keyframes roadLightFlow {
+    0% {
+        transform: translateX(-100%);
+        opacity: 0;
+    }
+    30% {
+        opacity: 1;
+    }
+    70% {
+        opacity: 1;
+    }
+    100% {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+}
+
+@keyframes floatGentle {
+    0%, 100% {
+        transform: translateY(0px);
+    }
+    50% {
+        transform: translateY(-5px);
+    }
+}
+
+@keyframes radarSweep {
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+.animate-cyber-glow {
+    animation: cyberGlow 4s ease-in-out infinite;
+}
+
+.animate-wave-flow {
+    stroke-dasharray: 24 14;
+    animation: waveFlow 4s linear infinite;
+}
+
+.animate-wave-flow-reverse {
+    stroke-dasharray: 20 12;
+    animation: waveFlow 5s linear infinite reverse;
+}
+
+.animate-float-gentle {
+    animation: floatGentle 3.5s ease-in-out infinite;
+}
+
+.animate-road-light {
+    animation: roadLightFlow 3s ease-in-out infinite;
+}
+
+.animate-radar {
+    animation: radarSweep 10s linear infinite;
+}
+
+@keyframes barShimmer {
+    0% {
+        transform: translateY(120%);
+        opacity: 0;
+    }
+    30% {
+        opacity: 0.85;
+    }
+    70% {
+        opacity: 0.85;
+    }
+    100% {
+        transform: translateY(-120%);
+        opacity: 0;
+    }
+}
+
+@keyframes barChargePulse {
+    0%, 100% {
+        filter: drop-shadow(0 0 8px rgba(6, 182, 212, 0.45));
+    }
+    50% {
+        filter: drop-shadow(0 0 20px rgba(6, 182, 212, 0.95)) brightness(1.15);
+    }
+}
+
+@keyframes barStripes {
+    0% {
+        background-position: 0 0;
+    }
+    100% {
+        background-position: 0 32px;
+    }
+}
+
+.animate-bar-shimmer {
+    animation: barShimmer 2.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.animate-bar-charge {
+    animation: barChargePulse 2s ease-in-out infinite;
+}
+
+.cyber-charging-stripes {
+    background-image: repeating-linear-gradient(
+        -45deg,
+        rgba(255, 255, 255, 0.18),
+        rgba(255, 255, 255, 0.18) 5px,
+        transparent 5px,
+        transparent 11px
+    );
+    background-size: 20px 20px;
+    animation: barStripes 1.8s linear infinite;
+}
+

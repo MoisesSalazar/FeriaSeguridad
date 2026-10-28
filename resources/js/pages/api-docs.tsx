@@ -34,9 +34,150 @@ interface ApiDocsProps {
     }>;
 }
 
+const DEFAULT_FULL_PAYLOAD = JSON.stringify(
+    {
+        date: '2026-10-27',
+        fechaReporte: '2026-10-27',
+        generadoEn: '2026-10-27T21:15:00.000Z',
+        updatedAt: '2026-10-27T21:15:00.000Z',
+        paused: false,
+        deteccion: {
+            fecha: '2026-10-27 16:15:00',
+            hora: '16:15',
+            camaraId: '2',
+            camara: 'Acceso 2',
+            configuracion: 'Entrada',
+            entraron: 411,
+            salieron: 0,
+            cambioEntradas: 1,
+            cambioSalidas: 0,
+            origen: 'http',
+        },
+        resumen: {
+            entraron: 411,
+            salieron: 0,
+            adentro: 411,
+        },
+        hojas: {
+            porMinuto: [
+                {
+                    Fecha: '2026-10-27 12:12:38',
+                    Hora: '12:12',
+                    Cámara: 'Acceso 2',
+                    Configuración: 'Entrada',
+                    Entraron: 411,
+                    Salieron: 0,
+                    'Cambio de entradas': 1,
+                    'Cambio de salidas': 0,
+                },
+            ],
+            porHora: [
+                {
+                    Cámara: 'Acceso 2',
+                    Configuración: 'Entrada',
+                    Hora: '08:00',
+                    Entraron: 28,
+                    Salieron: 0,
+                    Aporte: 28,
+                },
+                {
+                    Cámara: 'Acceso 2',
+                    Configuración: 'Entrada',
+                    Hora: '09:00',
+                    Entraron: 110,
+                    Salieron: 0,
+                    Aporte: 110,
+                },
+            ],
+            camaras: [
+                {
+                    Cámara: 'Acceso 1',
+                    Configuración: 'Entrada',
+                    'Lectura de imagen': 'Cada 5 segundos',
+                    Entraron: 0,
+                    Salieron: 0,
+                    'Aporte al total': 0,
+                },
+                {
+                    Cámara: 'Acceso 2',
+                    Configuración: 'Entrada',
+                    'Lectura de imagen': 'Cada 5 segundos',
+                    Entraron: 411,
+                    Salieron: 0,
+                    'Aporte al total': 411,
+                },
+                {
+                    Cámara: 'Total',
+                    Configuración: '',
+                    'Lectura de imagen': '',
+                    Entraron: 411,
+                    Salieron: 0,
+                    'Aporte al total': 411,
+                },
+            ],
+        },
+        cameras: [
+            {
+                id: '1',
+                name: 'Acceso 1',
+                countRole: 'entrada',
+                imageMode: '5',
+                enter: 0,
+                exit: 0,
+                share: 0,
+                reportAt: '2026-10-27T17:12:38.288Z',
+                hours: [],
+            },
+            {
+                id: '2',
+                name: 'Acceso 2',
+                countRole: 'entrada',
+                imageMode: '5',
+                enter: 411,
+                exit: 0,
+                share: 411,
+                reportAt: '2026-10-27T17:12:38.288Z',
+                hours: [
+                    { hour: 8, enter: 28, exit: 0 },
+                    { hour: 9, enter: 110, exit: 0 },
+                    { hour: 10, enter: 109, exit: 0 },
+                    { hour: 11, enter: 83, exit: 0 },
+                    { hour: 12, enter: 81, exit: 0 },
+                ],
+            },
+        ],
+        totals: [
+            { hour: 8, enter: 28, exit: 0 },
+            { hour: 9, enter: 110, exit: 0 },
+            { hour: 10, enter: 109, exit: 0 },
+            { hour: 11, enter: 83, exit: 0 },
+            { hour: 12, enter: 81, exit: 0 },
+        ],
+        enter: 411,
+        exit: 0,
+        changes: [
+            {
+                at: '2026-10-27T17:12:38.288Z',
+                hour: 12,
+                minute: 12,
+                cameraId: '2',
+                cameraName: 'Acceso 2',
+                countRole: 'entrada',
+                enter: 411,
+                exit: 0,
+                enterDelta: 1,
+                exitDelta: 0,
+                source: 'http',
+            },
+        ],
+    },
+    null,
+    2,
+);
+
 export default function ApiDocs({ stats }: ApiDocsProps) {
     const [activeTab, setActiveTab] = useState<
-        'record' | 'hourly' | 'upload' | 'tester'
+        'record' | 'hourly' | 'upload' | 'full' | 'tester'
     >('record');
 
     // Form states
@@ -50,6 +191,7 @@ export default function ApiDocs({ stats }: ApiDocsProps) {
     const [hourlyEntered, setHourlyEntered] = useState(50);
 
     const [excelFile, setExcelFile] = useState<File | null>(null);
+    const [fullJsonInput, setFullJsonInput] = useState(DEFAULT_FULL_PAYLOAD);
 
     // Submission & Response states
     const [loading, setLoading] = useState(false);
@@ -197,6 +339,54 @@ export default function ApiDocs({ stats }: ApiDocsProps) {
                 err instanceof Error
                     ? err.message
                     : 'Error al subir el archivo',
+            );
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Submit full monitoring payload (POST /api/conteo/completo)
+    const handleRegisterFullPayload = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setLoading(true);
+        setResponseMessage(null);
+        setResponseData(null);
+
+        try {
+            let parsedBody;
+            try {
+                parsedBody = JSON.parse(fullJsonInput);
+            } catch {
+                throw new Error('El JSON ingresado no tiene un formato válido.');
+            }
+
+            const res = await fetch('/api/conteo/completo', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json',
+                },
+                body: JSON.stringify(parsedBody),
+            });
+
+            const data = await res.json();
+            if (res.ok) {
+                setResponseStatus('success');
+                setResponseMessage(
+                    '¡Estructura completa procesada y registrada exitosamente en SQLite!',
+                );
+                setResponseData(data);
+            } else {
+                setResponseStatus('error');
+                setResponseMessage(
+                    data.message || 'Error al procesar payload completo',
+                );
+                setResponseData(data);
+            }
+        } catch (err: unknown) {
+            setResponseStatus('error');
+            setResponseMessage(
+                err instanceof Error ? err.message : 'Error en la conexión',
             );
         } finally {
             setLoading(false);
@@ -387,6 +577,19 @@ export default function ApiDocs({ stats }: ApiDocsProps) {
                                     }`}
                                 >
                                     Subir Excel
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        setActiveTab('full');
+                                        setResponseMessage(null);
+                                    }}
+                                    className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${
+                                        activeTab === 'full'
+                                            ? 'bg-gradient-to-r from-cyan-400 to-emerald-400 text-black shadow-[0_0_12px_rgba(6,182,212,0.6)] font-bold'
+                                            : 'text-cyan-300 hover:text-white'
+                                    }`}
+                                >
+                                    Payload Completo
                                 </button>
                                 <button
                                     onClick={() => {
@@ -634,6 +837,55 @@ export default function ApiDocs({ stats }: ApiDocsProps) {
                             </form>
                         )}
 
+                        {/* TAB 4: Full JSON Structure Payload (POST /api/conteo/completo) */}
+                        {activeTab === 'full' && (
+                            <form
+                                onSubmit={handleRegisterFullPayload}
+                                className="flex flex-col gap-4"
+                            >
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <p className="text-xs font-semibold text-cyan-300">
+                                            Estructura Completa de Cámaras, Hojas y Resumen
+                                        </p>
+                                        <p className="text-[11px] text-slate-400">
+                                            Edita o pega el payload JSON de monitoreo para registrarlo de forma completa.
+                                        </p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => setFullJsonInput(DEFAULT_FULL_PAYLOAD)}
+                                        className="text-xs text-slate-400 underline hover:text-cyan-300"
+                                    >
+                                        Restablecer Ejemplo
+                                    </button>
+                                </div>
+
+                                <div className="relative">
+                                    <textarea
+                                        rows={12}
+                                        value={fullJsonInput}
+                                        onChange={(e) => setFullJsonInput(e.target.value)}
+                                        className="w-full rounded-xl border border-cyan-500/40 bg-[#02050e] p-3 font-mono text-xs text-cyan-200 focus:border-cyan-400 focus:outline-none"
+                                        spellCheck={false}
+                                    />
+                                </div>
+
+                                <div className="flex items-center gap-3">
+                                    <button
+                                        type="submit"
+                                        disabled={loading}
+                                        className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-cyan-400 via-teal-400 to-emerald-400 px-5 py-2.5 text-sm font-bold text-black shadow-[0_0_20px_rgba(6,182,212,0.5)] transition-all hover:brightness-110 active:scale-95 disabled:opacity-50"
+                                    >
+                                        <Send className="h-4 w-4" />
+                                        {loading
+                                            ? 'Procesando Payload...'
+                                            : 'Enviar Payload Completo a la API'}
+                                    </button>
+                                </div>
+                            </form>
+                        )}
+
                         {/* TAB 4: Live GET tester */}
                         {activeTab === 'tester' && (
                             <div className="flex flex-col gap-3">
@@ -752,6 +1004,35 @@ export default function ApiDocs({ stats }: ApiDocsProps) {
   "change_entered": 1,
   "change_exited": 0
 }`}</pre>
+                            </div>
+                        </div>
+
+                        {/* Endpoint: POST /api/conteo/completo */}
+                        <div className="rounded-xl border border-emerald-500/40 bg-[#060e22]/90 p-4">
+                            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                                <div className="flex items-center gap-2">
+                                    <span className="rounded border border-emerald-500/50 bg-emerald-950/80 px-2 py-0.5 text-xs font-black text-emerald-400">
+                                        POST
+                                    </span>
+                                    <code className="font-mono text-sm font-bold text-emerald-300">
+                                        /api/conteo/completo
+                                    </code>
+                                </div>
+                                <span className="text-xs text-slate-400">
+                                    Registro de Estructura Completa (Multi-hoja)
+                                </span>
+                            </div>
+                            <p className="mb-3 text-xs text-slate-300">
+                                Recibe la estructura JSON completa de conteo con información de fecha, resumen, hojas (<code>porMinuto</code>, <code>porHora</code>, <code>camaras</code>), lista de cámaras, totales horarios y cambios por minuto. Sincroniza todas las tablas en una sola transacción.
+                            </p>
+                            <div className="overflow-x-auto rounded-lg border border-slate-800 bg-[#02050e] p-3 font-mono text-xs text-slate-300">
+                                <p className="mb-1 text-slate-500">
+                                    // CURL de ejemplo:
+                                </p>
+                                <pre>{`curl -X POST http://localhost:8000/api/conteo/completo \\
+  -H "Content-Type: application/json" \\
+  -H "Accept: application/json" \\
+  -d '{"date":"2026-10-27","resumen":{"entraron":411,"salieron":0,"adentro":411},"totals":[{"hour":8,"enter":28,"exit":0}],"cameras":[{"id":"2","name":"Acceso 2","enter":411,"exit":0}]}'`}</pre>
                             </div>
                         </div>
 

@@ -11,6 +11,7 @@ Route::prefix('v1')->group(function () {
     Route::get('/conteo/camaras', [DashboardController::class, 'camerasApi'])->name('api.conteo.cameras.v1');
     Route::post('/conteo/registro', [DashboardController::class, 'storeRecord'])->name('api.conteo.store-record.v1');
     Route::post('/conteo/hora', [DashboardController::class, 'storeHourly'])->name('api.conteo.store-hourly.v1');
+    Route::post('/conteo/completo', [DashboardController::class, 'storeFullPayload'])->name('api.conteo.completo.v1');
     Route::post('/conteo/import', [DashboardController::class, 'uploadExcel'])->name('api.conteo.import.v1');
 });
 
@@ -21,4 +22,6 @@ Route::get('/conteo/minutos', [DashboardController::class, 'minutesApi'])->name(
 Route::get('/conteo/camaras', [DashboardController::class, 'camerasApi'])->name('api.conteo.cameras');
 Route::post('/conteo/registro', [DashboardController::class, 'storeRecord'])->name('api.conteo.store-record');
 Route::post('/conteo/hora', [DashboardController::class, 'storeHourly'])->name('api.conteo.store-hourly');
+Route::post('/conteo/completo', [DashboardController::class, 'storeFullPayload'])->name('api.conteo.completo');
 Route::post('/conteo/import', [DashboardController::class, 'uploadExcel'])->name('api.conteo.import');
+
