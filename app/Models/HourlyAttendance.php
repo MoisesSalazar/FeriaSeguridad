@@ -10,6 +10,7 @@ class HourlyAttendance extends Model
      * @var list<string>
      */
     protected $fillable = [
+        'date',
         'camera',
         'configuration',
         'hour',

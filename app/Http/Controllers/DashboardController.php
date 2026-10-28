@@ -10,6 +10,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -48,115 +49,41 @@ class DashboardController extends Controller
             $year = '2026';
         }
 
-        // For October 26, 2026 (the official historical event dataset from conteo.xls):
-        if ($dateStr === '2026-10-26') {
-            $hourly = HourlyAttendance::orderBy('hour')->get();
-            $totalEntered = (int) $hourly->sum('entered');
-            if ($totalEntered === 0) {
-                $totalEntered = 932;
-            }
+        $standardHours = [
+            '08:00', '09:00', '10:00', '11:00', '12:00', '13:00',
+            '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00',
+        ];
 
-            $peak = $hourly->sortByDesc('entered')->first();
-            $peakHour = $peak ? $peak->hour : '10:00';
-            $peakCount = $peak ? (int) $peak->entered : 153;
-
-            $hoursCount = $hourly->count() ?: 10;
-            $minHour = $hourly->first()?->hour ?? '10:00';
-            $maxHour = $hourly->last()?->hour ?? '19:00';
-            $maxHourPrefix = explode(':', $maxHour)[0] ?? '19';
-            $rangeStr = "({$minHour} – {$maxHourPrefix}:59)";
-
-            $hourlyList = $hourly->map(function ($item) use ($isToday, $currentHourStr) {
-                return [
-                    'hour' => $item->hour,
-                    'label' => $item->hour,
-                    'count' => (int) $item->entered,
-                    'is_current' => $isToday && ($item->hour === $currentHourStr),
-                    'is_future' => $isToday && ($item->hour > $currentHourStr),
-                ];
-            })->values()->all();
-
-            $morningCount = (int) $hourly->whereIn('hour', ['10:00', '11:00', '12:00', '13:00'])->sum('entered');
-            $afternoonCount = (int) $hourly->whereIn('hour', ['14:00', '15:00', '16:00', '17:00', '18:00', '19:00'])->sum('entered');
-
-            $blocks = [
-                ['label' => '10-12h', 'count' => (int) $hourly->whereIn('hour', ['10:00', '11:00'])->sum('entered')],
-                ['label' => '12-14h', 'count' => 119],
-                ['label' => '14-16h', 'count' => 227],
-                ['label' => '16-18h', 'count' => 272],
-            ];
-
-            return [
-                'has_data' => true,
-                'date_str' => $dateStr,
-                'date_title' => $dateTitle,
-                'year' => $year,
-                'kpis' => [
-                    'registered_entries' => $totalEntered,
-                    'peak_hour' => [
-                        'hour' => $peakHour,
-                        'entries' => $peakCount,
-                    ],
-                    'analyzed_hours' => [
-                        'count' => $hoursCount,
-                        'range' => $rangeStr,
-                    ],
-                ],
-                'hourly_attendance' => $hourlyList,
-                'attendance_distribution' => [
-                    'morning' => [
-                        'label' => 'Mañana',
-                        'range' => '(10:00 – 13:59)',
-                        'count' => $morningCount,
-                        'percentage' => 53.2,
-                    ],
-                    'afternoon' => [
-                        'label' => 'Tarde',
-                        'range' => '(14:00 – 19:59)',
-                        'count' => $afternoonCount,
-                        'percentage' => 46.8,
-                    ],
-                    'main_badge' => [
-                        'percentage' => '53.2%',
-                        'label' => 'en la mañana',
-                    ],
-                ],
-                'two_hour_blocks' => $blocks,
-            ];
-        }
-
-        // For other dates (like today or dynamically recorded dates):
-        $minutes = MinuteAttendance::whereDate('recorded_at', $dateStr)->get();
-        $totalEntered = (int) $minutes->sum('change_entered');
-
-        if ($minutes->isEmpty() || $totalEntered <= 0) {
-            return [
-                'has_data' => false,
-                'date_str' => $dateStr,
-                'date_title' => $dateTitle,
-                'year' => $year,
-                'kpis' => [
-                    'registered_entries' => 0,
-                    'peak_hour' => ['hour' => '-', 'entries' => 0],
-                    'analyzed_hours' => ['count' => 0, 'range' => '-'],
-                ],
-                'hourly_attendance' => [],
-                'attendance_distribution' => [
-                    'morning' => ['label' => 'Mañana', 'range' => '(10:00 – 13:59)', 'count' => 0, 'percentage' => 0],
-                    'afternoon' => ['label' => 'Tarde', 'range' => '(14:00 – 19:59)', 'count' => 0, 'percentage' => 0],
-                    'main_badge' => ['percentage' => '0%', 'label' => 'sin registros'],
-                ],
-                'two_hour_blocks' => [],
-            ];
-        }
-
-        // Group minutes by hour
+        // 1. Check minute_attendances for this date
         $byHour = [];
-        foreach ($minutes as $m) {
-            $h = substr($m->time_str, 0, 2).':00';
-            $byHour[$h] = ($byHour[$h] ?? 0) + (int) $m->change_entered;
+        $minutes = MinuteAttendance::whereDate('recorded_at', $dateStr)->get();
+        if ($minutes->isNotEmpty()) {
+            foreach ($minutes as $m) {
+                $h = substr($m->time_str, 0, 2).':00';
+                $byHour[$h] = ($byHour[$h] ?? 0) + (int) $m->change_entered;
+            }
         }
-        ksort($byHour);
+
+        // 2. If minute_attendances was empty, check hourly_attendances
+        if (empty($byHour)) {
+            $hasDateCol = Schema::hasColumn('hourly_attendances', 'date');
+            $hourly = $hasDateCol
+                ? HourlyAttendance::where('date', $dateStr)->orderBy('hour')->get()
+                : HourlyAttendance::orderBy('hour')->get();
+
+            if ($hourly->isNotEmpty()) {
+                foreach ($hourly as $item) {
+                    $byHour[$item->hour] = ($byHour[$item->hour] ?? 0) + (int) $item->entered;
+                }
+            }
+        }
+
+        $totalEntered = (int) array_sum($byHour);
+        $hasData = ($totalEntered > 0);
+
+        // Always ensure standard hours from 08:00 to 20:00 exist by default, plus any extra recorded hours
+        $allHours = array_values(array_unique(array_merge($standardHours, array_keys($byHour))));
+        sort($allHours);
 
         $peakHour = '-';
         $peakCount = 0;
@@ -168,11 +95,12 @@ class DashboardController extends Controller
         }
 
         $hourlyList = [];
-        foreach ($byHour as $h => $cnt) {
+        foreach ($allHours as $h) {
+            $cnt = (int) ($byHour[$h] ?? 0);
             $hourlyList[] = [
                 'hour' => $h,
                 'label' => $h,
-                'count' => $cnt,
+                'count' => max(0, $cnt),
                 'is_current' => $isToday && ($h === $currentHourStr),
                 'is_future' => $isToday && ($h > $currentHourStr),
             ];
@@ -183,36 +111,48 @@ class DashboardController extends Controller
         foreach ($byHour as $h => $cnt) {
             $intH = (int) substr($h, 0, 2);
             if ($intH < 14) {
-                $morningCount += $cnt;
+                $morningCount += max(0, $cnt);
             } else {
-                $afternoonCount += $cnt;
+                $afternoonCount += max(0, $cnt);
             }
         }
-        $sum = $morningCount + $afternoonCount;
-        $mPct = $sum > 0 ? round(($morningCount / $sum) * 100, 1) : 0;
-        $aPct = $sum > 0 ? round(100 - $mPct, 1) : 0;
+        $sum = max(1, $morningCount + $afternoonCount);
+        $mPct = ($totalEntered > 0) ? round(($morningCount / $sum) * 100, 1) : 0;
+        $aPct = ($totalEntered > 0) ? round(100 - $mPct, 1) : 0;
 
-        $firstHour = array_key_first($byHour) ?? '10:00';
-        $lastHour = array_key_last($byHour) ?? '19:00';
+        $blocks = [
+            ['label' => '08-10h', 'count' => (int) ($byHour['08:00'] ?? 0) + (int) ($byHour['09:00'] ?? 0)],
+            ['label' => '10-12h', 'count' => (int) ($byHour['10:00'] ?? 0) + (int) ($byHour['11:00'] ?? 0)],
+            ['label' => '12-14h', 'count' => (int) ($byHour['12:00'] ?? 0) + (int) ($byHour['13:00'] ?? 0)],
+            ['label' => '14-16h', 'count' => (int) ($byHour['14:00'] ?? 0) + (int) ($byHour['15:00'] ?? 0)],
+            ['label' => '16-18h', 'count' => (int) ($byHour['16:00'] ?? 0) + (int) ($byHour['17:00'] ?? 0)],
+            ['label' => '18-20h', 'count' => (int) ($byHour['18:00'] ?? 0) + (int) ($byHour['19:00'] ?? 0)],
+        ];
+
+        $firstHour = $allHours[0] ?? '08:00';
+        $lastHour = end($allHours) ?: '20:00';
         $lastPrefix = explode(':', $lastHour)[0];
 
         return [
-            'has_data' => true,
+            'has_data' => $hasData,
             'date_str' => $dateStr,
             'date_title' => $dateTitle,
             'year' => $year,
             'kpis' => [
-                'registered_entries' => $totalEntered,
-                'peak_hour' => ['hour' => $peakHour, 'entries' => $peakCount],
-                'analyzed_hours' => ['count' => count($byHour), 'range' => "({$firstHour} – {$lastPrefix}:59)"],
+                'registered_entries' => max(0, $totalEntered),
+                'peak_hour' => ['hour' => $peakHour, 'entries' => max(0, $peakCount)],
+                'analyzed_hours' => ['count' => count($allHours), 'range' => "({$firstHour} – {$lastPrefix}:59)"],
             ],
             'hourly_attendance' => $hourlyList,
             'attendance_distribution' => [
-                'morning' => ['label' => 'Mañana', 'range' => '(10:00 – 13:59)', 'count' => $morningCount, 'percentage' => $mPct],
-                'afternoon' => ['label' => 'Tarde', 'range' => '(14:00 – 19:59)', 'count' => $afternoonCount, 'percentage' => $aPct],
-                'main_badge' => ['percentage' => ($mPct >= $aPct ? $mPct.'%' : $aPct.'%'), 'label' => ($mPct >= $aPct ? 'en la mañana' : 'en la tarde')],
+                'morning' => ['label' => 'Mañana', 'range' => '(08:00 – 13:59)', 'count' => $morningCount, 'percentage' => $mPct],
+                'afternoon' => ['label' => 'Tarde', 'range' => '(14:00 – 20:59)', 'count' => $afternoonCount, 'percentage' => $aPct],
+                'main_badge' => [
+                    'percentage' => ($totalEntered > 0 ? ($mPct >= $aPct ? $mPct.'%' : $aPct.'%') : '0%'),
+                    'label' => ($totalEntered > 0 ? ($mPct >= $aPct ? 'en la mañana' : 'en la tarde') : 'sin registros'),
+                ],
             ],
-            'two_hour_blocks' => [],
+            'two_hour_blocks' => $blocks,
         ];
     }
 
@@ -226,93 +166,169 @@ class DashboardController extends Controller
         $tz = config('app.timezone', 'America/Lima');
         $now = Carbon::now($tz);
         $todayStr = $now->format('Y-m-d');
-        $yesterdayStr = '2026-10-26';
 
-        // Default to today if not explicitly requested
-        $activeDate = $requestedDate ?: $todayStr;
-
-        $todayData = $this->getDayMetrics($todayStr);
-        $yesterdayData = $this->getDayMetrics($yesterdayStr);
-        $activeDayData = ($activeDate === $todayStr) ? $todayData : (($activeDate === $yesterdayStr) ? $yesterdayData : $this->getDayMetrics($activeDate));
-
-        $comparative = [
-            [
-                'date' => '2026-10-26',
-                'day_number' => 1,
-                'day_name' => 'Lunes 26 de Octubre',
-                'short_label' => '26 Oct (Día 1)',
-                'total_entered' => $yesterdayData['kpis']['registered_entries'],
-                'peak_hour' => $yesterdayData['kpis']['peak_hour']['hour'],
-                'peak_entries' => $yesterdayData['kpis']['peak_hour']['entries'],
-                'morning_percent' => $yesterdayData['attendance_distribution']['morning']['percentage'],
-                'afternoon_percent' => $yesterdayData['attendance_distribution']['afternoon']['percentage'],
-                'status' => 'Concluido',
-            ],
-            [
-                'date' => $todayStr,
-                'day_number' => 2,
-                'day_name' => 'Martes 27 de Octubre (Hoy)',
-                'short_label' => '27 Oct (Hoy)',
-                'total_entered' => $todayData['kpis']['registered_entries'],
-                'peak_hour' => $todayData['kpis']['peak_hour']['hour'],
-                'peak_entries' => $todayData['kpis']['peak_hour']['entries'],
-                'morning_percent' => $todayData['attendance_distribution']['morning']['percentage'],
-                'afternoon_percent' => $todayData['attendance_distribution']['afternoon']['percentage'],
-                'status' => 'En vivo',
-            ],
-        ];
-
-        $totalAccumulated = $yesterdayData['kpis']['registered_entries'] + $todayData['kpis']['registered_entries'];
-        $daysCount = count($comparative);
-
-        $generalSummary = [
-            'total_days_evaluated' => $daysCount,
-            'total_accumulated_entries' => $totalAccumulated,
-            'daily_average' => (int) round($totalAccumulated / max(1, $daysCount)),
-            'best_day' => [
-                'label' => '26 de Octubre',
-                'entries' => $yesterdayData['kpis']['registered_entries'],
-            ],
-            'historical_peak' => [
-                'day' => '26 de Octubre',
-                'hour' => '10:00',
-                'entries' => 153,
-            ],
-            'overall_morning_percent' => 53.2,
-            'overall_afternoon_percent' => 46.8,
-        ];
-
-        $dbDates = [];
-        try {
-            $dbDates = MinuteAttendance::select(DB::raw("DISTINCT DATE(recorded_at) as dt"))
-                ->pluck('dt')
-                ->filter()
-                ->toArray();
-        } catch (\Throwable) {
-            $dbDates = [];
+        // Find all distinct dates with records
+        $hourlyDates = [];
+        if (Schema::hasTable('hourly_attendances') && Schema::hasColumn('hourly_attendances', 'date')) {
+            $hourlyDates = HourlyAttendance::whereNotNull('date')->distinct()->pluck('date')->toArray();
         }
 
-        $allDates = array_values(array_unique(array_filter(array_merge(['2026-10-26', $todayStr], $dbDates))));
-        rsort($allDates);
-        $availableDates = [];
-        foreach ($allDates as $dt) {
-            $metric = ($dt === $todayStr) ? $todayData : (($dt === $yesterdayStr) ? $yesterdayData : $this->getDayMetrics($dt));
-            $carbonDate = Carbon::parse($dt);
-            $lbl = ($dt === $todayStr) ? 'Hoy (27 Oct)' : (($dt === $yesterdayStr) ? 'Ayer (26 Oct)' : $carbonDate->format('d M'));
-            $availableDates[] = [
+        $minuteDates = [];
+        if (Schema::hasTable('minute_attendances')) {
+            $minuteDates = MinuteAttendance::selectRaw('DATE(recorded_at) as dt')->distinct()->pluck('dt')->toArray();
+        }
+
+        $allRecordedDates = array_values(array_unique(array_filter(array_merge($hourlyDates, $minuteDates))));
+        sort($allRecordedDates);
+
+        // Compute metrics for all recorded dates that have real data
+        $todayData = $this->getDayMetrics($todayStr);
+        $datesWithMetrics = [];
+
+        foreach ($allRecordedDates as $dt) {
+            $metric = ($dt === $todayStr) ? $todayData : $this->getDayMetrics($dt);
+            if ($metric['has_data'] && ($metric['kpis']['registered_entries'] ?? 0) > 0) {
+                $datesWithMetrics[$dt] = $metric;
+            }
+        }
+
+        // Find previous recorded date before today, or calendar yesterday
+        $priorDatesWithData = array_values(array_filter(array_keys($datesWithMetrics), fn ($d) => $d < $todayStr));
+        $previousDate = ! empty($priorDatesWithData)
+            ? end($priorDatesWithData)
+            : Carbon::parse($todayStr)->subDay()->format('Y-m-d');
+
+        // Determine active date
+        if ($requestedDate && (in_array($requestedDate, $allRecordedDates, true) || preg_match('/^\d{4}-\d{2}-\d{2}$/', $requestedDate))) {
+            $activeDate = $requestedDate;
+        } elseif (! empty($priorDatesWithData)) {
+            // Default active date for date view: the day prior to today with data
+            $activeDate = end($priorDatesWithData);
+        } elseif (! empty($datesWithMetrics)) {
+            $activeDate = array_key_first($datesWithMetrics);
+        } else {
+            $activeDate = $previousDate;
+        }
+
+        $activeDayData = ($activeDate === $todayStr)
+            ? $todayData
+            : ($datesWithMetrics[$activeDate] ?? $this->getDayMetrics($activeDate));
+
+        // Build comparative list strictly from the first recorded date in chronological order
+        $comparative = [];
+        $dayNum = 1;
+        $bestDayLabel = '-';
+        $bestDayCount = 0;
+        $histPeakHour = '-';
+        $histPeakCount = 0;
+        $histPeakDay = '-';
+        $accumulatedEntries = 0;
+        $allMorningEntries = 0;
+        $allAfternoonEntries = 0;
+
+        foreach ($datesWithMetrics as $dt => $dayMetric) {
+            $entries = (int) ($dayMetric['kpis']['registered_entries'] ?? 0);
+
+            try {
+                $dtCarbon = Carbon::parse($dt)->locale('es');
+                $full = ucfirst($dtCarbon->isoFormat('dddd D [de] MMMM'));
+                $short = $dtCarbon->isoFormat('D MMM')." (Día {$dayNum})";
+            } catch (\Throwable) {
+                $short = "{$dt} (Día {$dayNum})";
+                $full = $dt;
+            }
+
+            $status = ($dt < $todayStr) ? 'Concluido' : (($dt === $todayStr) ? 'En vivo' : 'Programado');
+            $pEntries = (int) ($dayMetric['kpis']['peak_hour']['entries'] ?? 0);
+            $pHour = (string) ($dayMetric['kpis']['peak_hour']['hour'] ?? '-');
+
+            $morningCount = (int) ($dayMetric['attendance_distribution']['morning']['count'] ?? 0);
+            $afternoonCount = (int) ($dayMetric['attendance_distribution']['afternoon']['count'] ?? 0);
+            $allMorningEntries += $morningCount;
+            $allAfternoonEntries += $afternoonCount;
+
+            $comparative[] = [
                 'date' => $dt,
-                'label' => $lbl,
-                'entries' => $metric['kpis']['registered_entries'],
+                'day_number' => $dayNum,
+                'day_name' => $full,
+                'short_label' => $short,
+                'total_entered' => $entries,
+                'peak_hour' => $pHour,
+                'peak_entries' => $pEntries,
+                'morning_percent' => $dayMetric['attendance_distribution']['morning']['percentage'] ?? 0,
+                'afternoon_percent' => $dayMetric['attendance_distribution']['afternoon']['percentage'] ?? 0,
+                'status' => $status,
+            ];
+
+            $accumulatedEntries += $entries;
+
+            if ($entries > $bestDayCount) {
+                $bestDayCount = $entries;
+                $bestDayLabel = $full;
+            }
+
+            if ($pEntries > $histPeakCount) {
+                $histPeakCount = $pEntries;
+                $histPeakHour = $pHour;
+                $histPeakDay = $full;
+            }
+
+            $dayNum++;
+        }
+
+        $daysCount = max(1, count($comparative));
+        $totalDist = max(1, $allMorningEntries + $allAfternoonEntries);
+        $overallMorningPct = ($allMorningEntries + $allAfternoonEntries > 0)
+            ? round(($allMorningEntries / $totalDist) * 100, 1)
+            : 0;
+        $overallAfternoonPct = ($allMorningEntries + $allAfternoonEntries > 0)
+            ? round(($allAfternoonEntries / $totalDist) * 100, 1)
+            : 0;
+
+        $generalSummary = [
+            'total_days_evaluated' => count($comparative),
+            'total_accumulated_entries' => $accumulatedEntries,
+            'daily_average' => (int) round($accumulatedEntries / $daysCount),
+            'best_day' => [
+                'label' => $bestDayLabel,
+                'entries' => $bestDayCount,
+            ],
+            'historical_peak' => [
+                'day' => $histPeakDay,
+                'hour' => $histPeakHour,
+                'entries' => $histPeakCount,
+            ],
+            'overall_morning_percent' => $overallMorningPct,
+            'overall_afternoon_percent' => $overallAfternoonPct,
+        ];
+
+        // Available dates list for calendar selector
+        $availableDates = [];
+        foreach ($comparative as $cDay) {
+            $availableDates[] = [
+                'date' => $cDay['date'],
+                'label' => $cDay['day_name'].' (Día '.$cDay['day_number'].')',
+                'entries' => $cDay['total_entered'],
             ];
         }
 
+        if (! in_array($todayStr, array_column($comparative, 'date'), true)) {
+            $availableDates[] = [
+                'date' => $todayStr,
+                'label' => 'Hoy ('.Carbon::parse($todayStr)->locale('es')->isoFormat('D MMM').')',
+                'entries' => (int) ($todayData['kpis']['registered_entries'] ?? 0),
+            ];
+        }
+
+        $firstRecordedDate = ! empty($comparative) ? $comparative[0]['date'] : $todayStr;
+
         return array_merge($activeDayData, [
             'today_date' => $todayStr,
-            'yesterday_date' => $yesterdayStr,
+            'previous_date' => $previousDate,
+            'first_recorded_date' => $firstRecordedDate,
             'active_date' => $activeDate,
             'active_day_data' => $activeDayData,
             'today_data' => $todayData,
-            'yesterday_data' => $yesterdayData,
             'comparative' => $comparative,
             'general_summary' => $generalSummary,
             'available_dates' => $availableDates,
@@ -438,8 +454,15 @@ class DashboardController extends Controller
             ]);
 
             // Synchronize Hourly bucket
+            $todayDate = $now->format('Y-m-d');
+            $hasDateCol = Schema::hasColumn('hourly_attendances', 'date');
+            $hourlyCondition = ['camera' => $camera, 'hour' => $hourStr];
+            if ($hasDateCol) {
+                $hourlyCondition['date'] = $todayDate;
+            }
+
             $hourly = HourlyAttendance::firstOrCreate(
-                ['camera' => $camera, 'hour' => $hourStr],
+                $hourlyCondition,
                 ['configuration' => $configuration, 'entered' => 0, 'exited' => 0, 'contribution' => 0]
             );
 
@@ -503,10 +526,16 @@ class DashboardController extends Controller
             'entered' => 'required|integer|min:0',
             'exited' => 'nullable|integer|min:0',
             'configuration' => 'nullable|string|max:50',
+            'date' => 'nullable|string',
         ]);
 
+        $condition = ['camera' => $validated['camera'], 'hour' => $validated['hour']];
+        if (Schema::hasColumn('hourly_attendances', 'date')) {
+            $condition['date'] = $validated['date'] ?? Carbon::now()->format('Y-m-d');
+        }
+
         $record = HourlyAttendance::updateOrCreate(
-            ['camera' => $validated['camera'], 'hour' => $validated['hour']],
+            $condition,
             [
                 'configuration' => $validated['configuration'] ?? 'Entrada',
                 'entered' => $validated['entered'],
@@ -535,7 +564,8 @@ class DashboardController extends Controller
     public function uploadExcel(Request $request): JsonResponse
     {
         $request->validate([
-            'file' => 'required|file|max:10240',
+            'file' => 'required|file|max:20480',
+            'date' => 'nullable|string',
         ]);
 
         $uploadedFile = $request->file('file');
@@ -543,11 +573,17 @@ class DashboardController extends Controller
             return response()->json(['status' => 'error', 'message' => 'Archivo no recibido.'], 400);
         }
 
-        $tempPath = storage_path('app/temp_upload_'.time().'.xls');
+        $extension = strtolower($uploadedFile->getClientOriginalExtension() ?: 'xlsx');
+        $tempPath = storage_path('app/temp_upload_'.time().'.'.$extension);
         $uploadedFile->move(dirname($tempPath), basename($tempPath));
 
+        $params = ['--file' => $tempPath];
+        if ($request->filled('date')) {
+            $params['--date'] = (string) $request->input('date');
+        }
+
         try {
-            $exitCode = Artisan::call('import:conteo', ['--file' => $tempPath]);
+            $exitCode = Artisan::call('import:conteo', $params);
             $output = Artisan::output();
 
             if (file_exists($tempPath)) {
@@ -557,7 +593,7 @@ class DashboardController extends Controller
             if ($exitCode === 0) {
                 return response()->json([
                     'status' => 'success',
-                    'message' => 'Archivo Excel importado correctamente en la base de datos.',
+                    'message' => 'Archivo Excel importado correctamente (Primera hoja "Por minuto").',
                     'output' => $output,
                     'total_entries' => HourlyAttendance::sum('entered'),
                 ]);

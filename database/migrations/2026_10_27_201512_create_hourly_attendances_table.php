@@ -13,6 +13,7 @@ return new class extends Migration
     {
         Schema::create('hourly_attendances', function (Blueprint $table) {
             $table->id();
+            $table->date('date')->nullable()->index();
             $table->string('camera');
             $table->string('configuration')->default('Entrada');
             $table->string('hour')->index();
